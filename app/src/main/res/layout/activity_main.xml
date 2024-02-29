@@ -10,7 +10,7 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Device Finder 0.1"
+        android:text="Device Finder 0.2"
         android:textColor="@color/white"
         android:textStyle="bold"
         android:textSize="30sp"
@@ -35,15 +35,26 @@
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintVertical_bias="0.949" />
 
+    <TextView
+        android:id="@+id/bluetoothStatusTextView"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="8dp"
+        android:textColor="@color/white"
+        android:text="Bluetooth: Not connected"
+        android:textSize="16sp"
+        tools:layout_editor_absoluteX="115dp"
+        tools:layout_editor_absoluteY="166dp" />
+
     <Button
         android:id="@+id/button"
-        android:layout_width="163dp"
-        android:layout_height="71dp"
-        android:layout_marginBottom="104dp"
-        android:text="start search"
+        android:layout_width="159dp"
+        android:layout_height="146dp"
+        android:layout_marginBottom="292dp"
+        android:text="START SEARCH"
+        android:textSize="20dp"
         android:textStyle="bold"
         android:typeface="sans"
-        android:textSize="20dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
