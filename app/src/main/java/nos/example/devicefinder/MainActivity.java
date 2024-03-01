@@ -38,11 +38,19 @@ public class MainActivity extends AppCompatActivity {
 
     private static final int REQUEST_ENABLE_BT = 1;
     private static final UUID MY_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
+    // Declare TextView variable for displaying the message
+    private TextView bluetoothStatusTextView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        // Initialize bluetoothStatusTextView
+        bluetoothStatusTextView = findViewById(R.id.bluetoothStatusTextView);
+
+        // Check Bluetooth connection status and update message
+        updateBluetoothMessage();
 
         // Use this check to determine whether Bluetooth classic is supported on the device.
         // Then you can selectively disable BLE-related features.
@@ -52,6 +60,7 @@ public class MainActivity extends AppCompatActivity {
         BluetoothAdapter bluetoothAdapter = bluetoothManager.getAdapter();
         if (bluetoothAdapter == null) {
             // Device doesn't support Bluetooth
+            bluetoothStatusTextView.setText("Bluetooth not supported on this device");
             return;
         }
 
@@ -63,6 +72,7 @@ public class MainActivity extends AppCompatActivity {
             //                                          int[] grantResults)
             // to handle the case where the user grants the permission. See the documentation
             // for ActivityCompat#requestPermissions for more details.
+            bluetoothStatusTextView.setText("Permissions not given on creation");
             return;
         }
 
@@ -86,6 +96,42 @@ public class MainActivity extends AppCompatActivity {
         registerReceiver(receiver, filter);
     }
 
+    // Method to update the message based on Bluetooth connection status
+    private void updateBluetoothMessage() {
+        BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+
+        if (bluetoothAdapter == null) {
+            // Device doesn't support Bluetooth
+            bluetoothStatusTextView.setText("Bluetooth not supported on this device");
+        } else {
+            if (bluetoothAdapter.isEnabled()) {
+                // Bluetooth is enabled
+                if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                    // TODO: Consider calling
+                    //    ActivityCompat#requestPermissions
+                    // here to request the missing permissions, and then overriding
+                    //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                    //                                          int[] grantResults)
+                    // to handle the case where the user grants the permission. See the documentation
+                    // for ActivityCompat#requestPermissions for more details.
+                    bluetoothStatusTextView.setText("Permission not given");
+                    return;
+                }
+                Set<BluetoothDevice> pairedDevices = bluetoothAdapter.getBondedDevices();
+                if (pairedDevices.size() > 0) {
+                    // There are paired devices
+                    bluetoothStatusTextView.setText("Bluetooth Paired");
+                } else {
+                    // No paired devices
+                    bluetoothStatusTextView.setText("Bluetooth enabled, but not paired");
+                }
+            } else {
+                // Bluetooth is not enabled
+                bluetoothStatusTextView.setText("Bluetooth is disabled");
+            }
+        }
+    }
+
     // Create a BroadcastReceiver for ACTION_FOUND.
     private final BroadcastReceiver receiver = new BroadcastReceiver() {
         public void onReceive(Context context, Intent intent) {
@@ -102,6 +148,7 @@ public class MainActivity extends AppCompatActivity {
                     //                                          int[] grantResults)
                     // to handle the case where the user grants the permission. See the documentation
                     // for ActivityCompat#requestPermissions for more details.
+                    bluetoothStatusTextView.setText("Permissions not given on broadcast receiver");
                     return;
                 }
                 String deviceName = device.getName();
@@ -142,6 +189,7 @@ public class MainActivity extends AppCompatActivity {
                     //                                          int[] grantResults)
                     // to handle the case where the user grants the permission. See the documentation
                     // for ActivityCompat#requestPermissions for more details.
+                    bluetoothStatusTextView.setText("Permissions not given on Accept thread");
                     return;
                 }
                 tmp = bluetoothAdapter.listenUsingRfcommWithServiceRecord(NAME, MY_UUID);
