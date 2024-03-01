@@ -40,6 +40,8 @@ public class MainActivity extends AppCompatActivity {
     private static final UUID MY_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
     // Declare TextView variable for displaying the message
     private TextView bluetoothStatusTextView;
+    private static final int REQUEST_BLUETOOTH_PERMISSION = 1; // You can use any integer value here
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -65,16 +67,17 @@ public class MainActivity extends AppCompatActivity {
         }
 
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-            // TODO: Consider calling
-            //    ActivityCompat#requestPermissions
-            // here to request the missing permissions, and then overriding
-            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-            //                                          int[] grantResults)
-            // to handle the case where the user grants the permission. See the documentation
-            // for ActivityCompat#requestPermissions for more details.
-            bluetoothStatusTextView.setText("Permissions not given on creation");
-            return;
+            // Permission hasn't been granted, request it
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.BLUETOOTH_CONNECT}, REQUEST_BLUETOOTH_PERMISSION);
+            // After this call, your onRequestPermissionsResult() method will be called
+            bluetoothStatusTextView.setText("Permissions not granted!");
+        } else {
+            // Permission has been granted, proceed with your operation
+            // For example:
+            // Do something with Bluetooth
+            // bluetoothStatusTextView.setText("Bluetooth permissions granted on creation!");
         }
+
 
         if (!bluetoothAdapter.isEnabled()) {
             Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
@@ -91,11 +94,30 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // Register for broadcasts when a device is discovered.
-        IntentFilter filter = new IntentFilter(BluetoothDevice.ACTION_FOUND);
-        registerReceiver(receiver, filter);
+        // Register BroadcastReceiver to listen for Bluetooth state changes
+        IntentFilter filter = new IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED);
+        registerReceiver(bluetoothStateReceiver, filter);
     }
 
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQUEST_BLUETOOTH_PERMISSION) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                // Permission granted, update the message
+                updateBluetoothMessage();
+            } else {
+                // Permission denied, handle this as appropriate
+                bluetoothStatusTextView.setText("Bluetooth permissions denied");
+            }
+        }
+    }
+
+
+    // Maintain a list of connected devices
+    private List<BluetoothDevice> connectedDevices = new ArrayList<>();
+
+    // Method to update the message based on Bluetooth connection status
     // Method to update the message based on Bluetooth connection status
     private void updateBluetoothMessage() {
         BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
@@ -106,24 +128,33 @@ public class MainActivity extends AppCompatActivity {
         } else {
             if (bluetoothAdapter.isEnabled()) {
                 // Bluetooth is enabled
-                if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-                    // TODO: Consider calling
-                    //    ActivityCompat#requestPermissions
-                    // here to request the missing permissions, and then overriding
-                    //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-                    //                                          int[] grantResults)
-                    // to handle the case where the user grants the permission. See the documentation
-                    // for ActivityCompat#requestPermissions for more details.
-                    bluetoothStatusTextView.setText("Permission not given");
-                    return;
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                    // Permission hasn't been granted, request it
+                    ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.BLUETOOTH_CONNECT}, REQUEST_BLUETOOTH_PERMISSION);
+                    // After this call, your onRequestPermissionsResult() method will be called
+                    bluetoothStatusTextView.setText("Permissions not granted!");
+                } else {
+                    // Permission has been granted, proceed with your operation
+                    // For example:
+                    // Do something with Bluetooth
+                    bluetoothStatusTextView.setText("Bluetooth permissions granted");
                 }
                 Set<BluetoothDevice> pairedDevices = bluetoothAdapter.getBondedDevices();
-                if (pairedDevices.size() > 0) {
-                    // There are paired devices
-                    bluetoothStatusTextView.setText("Bluetooth Paired");
+                StringBuilder devicesText = new StringBuilder();
+                int count = 0;
+                for (BluetoothDevice device : pairedDevices) {
+                    if (count < 4) {
+                        String deviceName = device.getName();
+                        devicesText.append(deviceName).append("\n");
+                        count++;
+                    } else {
+                        break; // Stop iterating after reaching the limit
+                    }
+                }
+                if (count > 0) {
+                    bluetoothStatusTextView.setText("Bluetooth enabled\n\nPaired Devices:\n" + devicesText.toString());
                 } else {
-                    // No paired devices
-                    bluetoothStatusTextView.setText("Bluetooth enabled, but not paired");
+                    bluetoothStatusTextView.setText("Bluetooth enabled, but no paired devices");
                 }
             } else {
                 // Bluetooth is not enabled
@@ -132,30 +163,15 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // Create a BroadcastReceiver for ACTION_FOUND.
-    private final BroadcastReceiver receiver = new BroadcastReceiver() {
-        public void onReceive(Context context, Intent intent) {
-            String action = intent.getAction();
-            if (BluetoothDevice.ACTION_FOUND.equals(action)) {
-                // Discovery has found a device. Get the BluetoothDevice
-                // object and its info from the Intent.
-                BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-                if (ActivityCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-                    // TODO: Consider calling
-                    //    ActivityCompat#requestPermissions
-                    // here to request the missing permissions, and then overriding
-                    //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-                    //                                          int[] grantResults)
-                    // to handle the case where the user grants the permission. See the documentation
-                    // for ActivityCompat#requestPermissions for more details.
-                    bluetoothStatusTextView.setText("Permissions not given on broadcast receiver");
-                    return;
-                }
-                String deviceName = device.getName();
-                String deviceHardwareAddress = device.getAddress(); // MAC address
+    // Method to check if the device is connected to a specific Bluetooth device
+    private boolean isConnected(BluetoothDevice device) {
+        for (BluetoothDevice connectedDevice : connectedDevices) {
+            if (connectedDevice.getAddress().equals(device.getAddress())) {
+                return true;
             }
         }
-    };
+        return false;
+    }
 
     @Override
     protected void onDestroy() {
@@ -164,9 +180,19 @@ public class MainActivity extends AppCompatActivity {
         // more code
 
         // Don't forget to unregister the ACTION_FOUND receiver.
-        unregisterReceiver(receiver);
+        unregisterReceiver(bluetoothStateReceiver);
     }
 
+    // BroadcastReceiver to listen for changes in Bluetooth state
+    private final BroadcastReceiver bluetoothStateReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            final String action = intent.getAction();
+            if (action.equals(BluetoothAdapter.ACTION_STATE_CHANGED)) {
+                updateBluetoothMessage();
+            }
+        }
+    };
 
     private class AcceptThread extends Thread {
         private BluetoothServerSocket mmServerSocket = null;
@@ -182,15 +208,15 @@ public class MainActivity extends AppCompatActivity {
                 // MY_UUID is the app's UUID string, also used by the client code.
 
                 if (ActivityCompat.checkSelfPermission(MainActivity.this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-                    // TODO: Consider calling
-                    //    ActivityCompat#requestPermissions
-                    // here to request the missing permissions, and then overriding
-                    //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-                    //                                          int[] grantResults)
-                    // to handle the case where the user grants the permission. See the documentation
-                    // for ActivityCompat#requestPermissions for more details.
-                    bluetoothStatusTextView.setText("Permissions not given on Accept thread");
-                    return;
+                    // Permission hasn't been granted, request it
+                    ActivityCompat.requestPermissions(MainActivity.this, new String[]{Manifest.permission.BLUETOOTH_CONNECT}, REQUEST_BLUETOOTH_PERMISSION);
+                    // After this call, your onRequestPermissionsResult() method will be called
+                    bluetoothStatusTextView.setText("Permissions not granted!");
+                } else {
+                    // Permission has been granted, proceed with your operation
+                    // For example:
+                    // Do something with Bluetooth
+                    bluetoothStatusTextView.setText("Bluetooth permissions granted");
                 }
                 tmp = bluetoothAdapter.listenUsingRfcommWithServiceRecord(NAME, MY_UUID);
             } catch (IOException e) {
