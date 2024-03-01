@@ -1,110 +1,292 @@
 package nos.example.devicefinder;
 
 import androidx.appcompat.app.AppCompatActivity;
+
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.BroadcastReceiver;
+
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+
 import android.Manifest;
+import android.content.Context;
 import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothManager;
+import android.bluetooth.BluetoothSocket;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
+import android.bluetooth.BluetoothServerSocket;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.os.Message;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.util.Log;
+import android.os.Handler;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.util.UUID;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
 public class MainActivity extends AppCompatActivity {
 
-    private static final int REQUEST_BLUETOOTH_PERMISSION = 1;
-    private TextView bluetoothStatusTextView;
+    private static final int REQUEST_ENABLE_BT = 1;
+    private static final UUID MY_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        bluetoothStatusTextView = findViewById(R.id.bluetoothStatusTextView);
+        // Use this check to determine whether Bluetooth classic is supported on the device.
+        // Then you can selectively disable BLE-related features.
+        boolean bluetoothAvailable = getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH);
 
-        // Check if Bluetooth permissions are granted
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-                != PackageManager.PERMISSION_GRANTED) {
-            // Permission is not granted, request it
-            ActivityCompat.requestPermissions(this,
-                    new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
-                    REQUEST_BLUETOOTH_PERMISSION);
-        } else {
-            // Permission is already granted, proceed with your Bluetooth functionality
-            checkBluetoothConnection();
-        }
-    }
-
-    // Check Bluetooth connection status and display the message
-    private void checkBluetoothConnection() {
-        // Get the name of the connected Bluetooth device
-        String connectedDeviceName = getConnectedDeviceName();
-
-        if (connectedDeviceName != null) {
-            bluetoothStatusTextView.setText("Bluetooth: Connected to " + connectedDeviceName);
-        } else {
-            bluetoothStatusTextView.setText("Bluetooth: Not connected");
-        }
-    }
-
-    // Handle the result of the permission request
-    @Override
-    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == REQUEST_BLUETOOTH_PERMISSION) {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                // Permission granted, proceed with checking Bluetooth connection
-                checkBluetoothConnection();
-            } else {
-                // Permission denied, show a message or disable Bluetooth functionality
-                Toast.makeText(this, "Bluetooth permission denied", Toast.LENGTH_SHORT).show();
-            }
-        }
-    }
-
-    private String getConnectedDeviceName() {
-        BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+        BluetoothManager bluetoothManager = getSystemService(BluetoothManager.class);
+        BluetoothAdapter bluetoothAdapter = bluetoothManager.getAdapter();
         if (bluetoothAdapter == null) {
-            return null;
+            // Device doesn't support Bluetooth
+            return;
         }
 
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH) != PackageManager.PERMISSION_GRANTED) {
-            // Permission is not granted, request it from the user
-            int requestCode = 1; // You can use any integer value here
-            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.BLUETOOTH}, requestCode);
-        } else {
-            // Permission is granted, proceed with getting bonded devices
-            Set<BluetoothDevice> bondedDevices = bluetoothAdapter.getBondedDevices();
-            // Continue with your code...
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+            // TODO: Consider calling
+            //    ActivityCompat#requestPermissions
+            // here to request the missing permissions, and then overriding
+            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+            //                                          int[] grantResults)
+            // to handle the case where the user grants the permission. See the documentation
+            // for ActivityCompat#requestPermissions for more details.
+            return;
         }
 
-        // Get a set of bonded (paired) Bluetooth devices
-        Set<BluetoothDevice> bondedDevices = bluetoothAdapter.getBondedDevices();
-        List<BluetoothDevice> bondedDeviceList = new ArrayList<>(bondedDevices);
+        if (!bluetoothAdapter.isEnabled()) {
+            Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
+            startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);
+        }
 
-        // Check each bonded device
-        for (BluetoothDevice device : bondedDeviceList) {
-            // Check if we have permission to access device name
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_ADMIN) == PackageManager.PERMISSION_GRANTED) {
+        Set<BluetoothDevice> pairedDevices = bluetoothAdapter.getBondedDevices();
+
+        if (pairedDevices.size() > 0) {
+            // There are paired devices. Get the name and address of each paired device.
+            for (BluetoothDevice device : pairedDevices) {
                 String deviceName = device.getName();
-                if (deviceName != null) {
-                    // Do something with the connected device name
-                    return deviceName;
-                }
-            } else {
-                // We don't have permission to access device name
-                // Handle this case as needed, e.g., request permission
-                // or return a default value
-                return null;
+                String deviceHardwareAddress = device.getAddress(); // MAC address
             }
         }
-        return null;
+
+        // Register for broadcasts when a device is discovered.
+        IntentFilter filter = new IntentFilter(BluetoothDevice.ACTION_FOUND);
+        registerReceiver(receiver, filter);
+    }
+
+    // Create a BroadcastReceiver for ACTION_FOUND.
+    private final BroadcastReceiver receiver = new BroadcastReceiver() {
+        public void onReceive(Context context, Intent intent) {
+            String action = intent.getAction();
+            if (BluetoothDevice.ACTION_FOUND.equals(action)) {
+                // Discovery has found a device. Get the BluetoothDevice
+                // object and its info from the Intent.
+                BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+                if (ActivityCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                    // TODO: Consider calling
+                    //    ActivityCompat#requestPermissions
+                    // here to request the missing permissions, and then overriding
+                    //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                    //                                          int[] grantResults)
+                    // to handle the case where the user grants the permission. See the documentation
+                    // for ActivityCompat#requestPermissions for more details.
+                    return;
+                }
+                String deviceName = device.getName();
+                String deviceHardwareAddress = device.getAddress(); // MAC address
+            }
+        }
+    };
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+
+        // more code
+
+        // Don't forget to unregister the ACTION_FOUND receiver.
+        unregisterReceiver(receiver);
     }
 
 
+    private class AcceptThread extends Thread {
+        private BluetoothServerSocket mmServerSocket = null;
+        BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+        private static final String TAG = "AcceptThread";
+        private static final String NAME = "DeviceFinderBluetoothServiceName";
+
+        public AcceptThread() {
+            // Use a temporary object that is later assigned to mmServerSocket
+            // because mmServerSocket is final.
+            BluetoothServerSocket tmp = null;
+            try {
+                // MY_UUID is the app's UUID string, also used by the client code.
+
+                if (ActivityCompat.checkSelfPermission(MainActivity.this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                    // TODO: Consider calling
+                    //    ActivityCompat#requestPermissions
+                    // here to request the missing permissions, and then overriding
+                    //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                    //                                          int[] grantResults)
+                    // to handle the case where the user grants the permission. See the documentation
+                    // for ActivityCompat#requestPermissions for more details.
+                    return;
+                }
+                tmp = bluetoothAdapter.listenUsingRfcommWithServiceRecord(NAME, MY_UUID);
+            } catch (IOException e) {
+                Log.e(TAG, "Socket's listen() method failed", e);
+            }
+            mmServerSocket = tmp;
+        }
+
+        public void run() {
+            BluetoothSocket socket = null;
+            // Keep listening until exception occurs or a socket is returned.
+            while (true) {
+                try {
+                    socket = mmServerSocket.accept();
+                } catch (IOException e) {
+                    Log.e(TAG, "Socket's accept() method failed", e);
+                    break;
+                }
+
+                if (socket != null) {
+                    // A connection was accepted. Perform work associated with
+                    // the connection in a separate thread.
+                    manageMyConnectedSocket(socket);
+                    try {
+                        mmServerSocket.close();
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                    break;
+                }
+            }
+        }
+
+        // Closes the connect socket and causes the thread to finish.
+        public void cancel() {
+            try {
+                mmServerSocket.close();
+            } catch (IOException e) {
+                Log.e(TAG, "Could not close the connect socket", e);
+            }
+        }
+
+        private void manageMyConnectedSocket(BluetoothSocket socket) {
+            // Create and start the thread for data transfer
+            MyBluetoothService.ConnectedThread connectedThread = new MyBluetoothService.ConnectedThread(socket);
+            connectedThread.start();
+        }
+    }
+
+    public static class MyBluetoothService {
+        private static final String TAG = "MY_APP_DEBUG_TAG";
+        private Handler handler; // handler that gets info from Bluetooth service
+
+        // Defines several constants used when transmitting messages between the
+        // service and the UI.
+        private interface MessageConstants {
+            public static final int MESSAGE_READ = 0;
+            public static final int MESSAGE_WRITE = 1;
+            public static final int MESSAGE_TOAST = 2;
+
+            // ... (Add other message types here as needed.)
+        }
+
+        private static class ConnectedThread extends Thread {
+            private final BluetoothSocket mmSocket;
+            private final InputStream mmInStream;
+            private final OutputStream mmOutStream;
+            private byte[] mmBuffer; // mmBuffer store for the stream
+            private Handler handler;
+
+            public ConnectedThread(BluetoothSocket socket) {
+                mmSocket = socket;
+                InputStream tmpIn = null;
+                OutputStream tmpOut = null;
+
+                // Get the input and output streams; using temp objects because
+                // member streams are final.
+                try {
+                    tmpIn = socket.getInputStream();
+                } catch (IOException e) {
+                    Log.e(TAG, "Error occurred when creating input stream", e);
+                }
+                try {
+                    tmpOut = socket.getOutputStream();
+                } catch (IOException e) {
+                    Log.e(TAG, "Error occurred when creating output stream", e);
+                }
+
+                mmInStream = tmpIn;
+                mmOutStream = tmpOut;
+            }
+
+            public void run() {
+                mmBuffer = new byte[1024];
+                int numBytes; // bytes returned from read()
+
+                // Keep listening to the InputStream until an exception occurs.
+                while (true) {
+                    try {
+                        // Read from the InputStream.
+                        numBytes = mmInStream.read(mmBuffer);
+                        // Send the obtained bytes to the UI activity.
+                        Message readMsg = handler.obtainMessage(
+                                MessageConstants.MESSAGE_READ, numBytes, -1,
+                                mmBuffer);
+                        readMsg.sendToTarget();
+                    } catch (IOException e) {
+                        Log.d(TAG, "Input stream was disconnected", e);
+                        break;
+                    }
+                }
+            }
+
+            // Call this from the main activity to send data to the remote device.
+            public void write(byte[] bytes) {
+                try {
+                    mmOutStream.write(bytes);
+
+                    // Share the sent message with the UI activity.
+                    Message writtenMsg = handler.obtainMessage(
+                            MessageConstants.MESSAGE_WRITE, -1, -1, mmBuffer);
+                    writtenMsg.sendToTarget();
+                } catch (IOException e) {
+                    Log.e(TAG, "Error occurred when sending data", e);
+
+                    // Send a failure message back to the activity.
+                    Message writeErrorMsg =
+                            handler.obtainMessage(MessageConstants.MESSAGE_TOAST);
+                    Bundle bundle = new Bundle();
+                    bundle.putString("toast",
+                            "Couldn't send data to the other device");
+                    writeErrorMsg.setData(bundle);
+                    handler.sendMessage(writeErrorMsg);
+                }
+            }
+
+            // Call this method from the main activity to shut down the connection.
+            public void cancel() {
+                try {
+                    mmSocket.close();
+                } catch (IOException e) {
+                    Log.e(TAG, "Could not close the connect socket", e);
+                }
+            }
+        }
+    }
 }
