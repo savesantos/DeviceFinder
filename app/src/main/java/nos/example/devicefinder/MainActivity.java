@@ -117,7 +117,9 @@ public class MainActivity extends AppCompatActivity {
     // Maintain a list of connected devices
     private List<BluetoothDevice> connectedDevices = new ArrayList<>();
 
-    // Method to update the message based on Bluetooth connection status
+    // Declare a variable to store the currently connected BluetoothDevice
+    private BluetoothDevice connectedDevice = null;
+
     // Method to update the message based on Bluetooth connection status
     private void updateBluetoothMessage() {
         BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
@@ -156,11 +158,52 @@ public class MainActivity extends AppCompatActivity {
                 } else {
                     bluetoothStatusTextView.setText("Bluetooth enabled, but no paired devices");
                 }
+
+                // Check if connected to a device
+                if (connectedDevice != null) {
+                    String connectedDeviceInfo = "Connected to: " + connectedDevice.getName();
+                    bluetoothStatusTextView.append("\n" + connectedDeviceInfo);
+                }
             } else {
                 // Bluetooth is not enabled
                 bluetoothStatusTextView.setText("Bluetooth is disabled");
             }
         }
+    }
+
+    // Create a BroadcastReceiver for Bluetooth connection state changes.
+    private final BroadcastReceiver bluetoothConnectionReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            final String action = intent.getAction();
+            if (action.equals(BluetoothDevice.ACTION_ACL_CONNECTED)) {
+                // A device has been connected
+                BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+                connectedDevice = device;
+                updateBluetoothMessage();
+            } else if (action.equals(BluetoothDevice.ACTION_ACL_DISCONNECTED)) {
+                // A device has been disconnected
+                connectedDevice = null;
+                updateBluetoothMessage();
+            }
+        }
+    };
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Register BroadcastReceiver to listen for Bluetooth connection state changes
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(BluetoothDevice.ACTION_ACL_CONNECTED);
+        filter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED);
+        registerReceiver(bluetoothConnectionReceiver, filter);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        // Unregister the BroadcastReceiver
+        unregisterReceiver(bluetoothConnectionReceiver);
     }
 
     // Method to check if the device is connected to a specific Bluetooth device
