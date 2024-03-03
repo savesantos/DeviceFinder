@@ -61,9 +61,42 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+            // Permission hasn't been granted, request it
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.BLUETOOTH_CONNECT}, REQUEST_BLUETOOTH_PERMISSION);
+            // After this call, your onRequestPermissionsResult() method will be called
+            bluetoothStatusTextView.setText("Permissions not granted!");
+        } else {
+            // Permission has been granted, proceed with your operation
+            // For example:
+            // Do something with Bluetooth
+            // bluetoothStatusTextView.setText("Bluetooth permissions granted on creation!");
+        }
+
+        // Check for already connected devices
+        Set<BluetoothDevice> connectedDevices = bluetoothAdapter.getBondedDevices();
+        for (BluetoothDevice device : connectedDevices) {
+            if (device.getName().equals(TARGET_DEVICE_NAME)) {
+                connectedDevice = device;
+                break;
+            }
+        }
+
+        // Register broadcast receiver for Bluetooth state changes
         IntentFilter filter = new IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED);
         registerReceiver(bluetoothStateReceiver, filter);
+
+        // Register broadcast receiver for Bluetooth connection events
+        IntentFilter filter2 = new IntentFilter();
+        filter2.addAction(BluetoothDevice.ACTION_ACL_CONNECTED);
+        filter2.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED);
+        registerReceiver(bluetoothConnectionReceiver, filter2);
+
+        // Update Bluetooth message to reflect current connection status
+        updateBluetoothMessage();
     }
+
+
 
     private void checkBluetoothStatus() {
         if (bluetoothAdapter.isEnabled()) {
@@ -257,26 +290,29 @@ public class MainActivity extends AppCompatActivity {
             if (action.equals(BluetoothDevice.ACTION_ACL_CONNECTED)) {
                 BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
                 connectedDevice = device;
-                updateBluetoothMessage();
+                updateBluetoothMessage(); // Update the Bluetooth message here
             } else if (action.equals(BluetoothDevice.ACTION_ACL_DISCONNECTED)) {
                 connectedDevice = null;
-                updateBluetoothMessage();
+                updateBluetoothMessage(); // Update the Bluetooth message here
             }
         }
     };
 
+
     @Override
     protected void onResume() {
         super.onResume();
-        IntentFilter filter = new IntentFilter();
-        filter.addAction(BluetoothDevice.ACTION_ACL_CONNECTED);
-        filter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED);
-        registerReceiver(bluetoothConnectionReceiver, filter);
+        // Register broadcast receiver for Bluetooth connection events
+        registerReceiver(bluetoothConnectionReceiver, new IntentFilter(BluetoothDevice.ACTION_ACL_CONNECTED));
+        registerReceiver(bluetoothConnectionReceiver, new IntentFilter(BluetoothDevice.ACTION_ACL_DISCONNECTED));
+        // Update Bluetooth message to reflect current connection status
+        updateBluetoothMessage();
     }
 
     @Override
     protected void onPause() {
         super.onPause();
+        // Unregister broadcast receiver to avoid memory leaks
         unregisterReceiver(bluetoothConnectionReceiver);
     }
 
