@@ -114,8 +114,6 @@ public class MainActivity extends AppCompatActivity {
                 if (connectThread != null) {
                     connectThread.cancel();
                 }
-                // Update UI or perform any other necessary actions
-                bluetoothConnectionStatus.setText("Device disconnected");
             } catch (Exception e) {
                 Log.e("MainActivity", "Error occurred while disconnecting", e);
             } finally {
