@@ -39,6 +39,7 @@ public class MainActivity extends AppCompatActivity {
     private ConnectThread connectThread; // Declare connectThread variable
 
 
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -46,6 +47,14 @@ public class MainActivity extends AppCompatActivity {
 
         bluetoothStatusTextView = findViewById(R.id.bluetoothStatusTextView);
         bluetoothConnectionStatus = findViewById(R.id.bluetoothConnectionStatus);
+
+        Log.d("MainActivity", "onCreate: Checking connection status");
+        if (connectedDevice != null) {
+            Log.d("MainActivity", "onCreate: Device is already connected, disconnecting...");
+            disconnectDevice(connectThread);
+        } else {
+            Log.d("MainActivity", "onCreate: No device connected");
+        }
 
         bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
         if (bluetoothAdapter == null) {
@@ -83,14 +92,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        Log.d("MainActivity", "onCreate: Checking connection status");
-        if (connectedDevice != null) {
-            Log.d("MainActivity", "onCreate: Device is already connected, disconnecting...");
-            disconnectDevice();
-        } else {
-            Log.d("MainActivity", "onCreate: No device connected");
-        }
-
 
         // Register broadcast receiver for Bluetooth state changes
         IntentFilter filter = new IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED);
@@ -106,7 +107,7 @@ public class MainActivity extends AppCompatActivity {
         updateBluetoothMessage();
     }
 
-    private void disconnectDevice() {
+    private void disconnectDevice(ConnectThread connectThread) {
         if (connectedDevice != null) {
             // Perform disconnection operations here
             try {
@@ -196,6 +197,7 @@ public class MainActivity extends AppCompatActivity {
             if (device.getName().equals(deviceName)) {
                 ConnectThread connectThread = new ConnectThread(device);
                 connectThread.start();
+                disconnectDevice(connectThread); // Pass connectThread to disconnectDevice
                 return;
             }
         }
