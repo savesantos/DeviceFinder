@@ -36,6 +36,7 @@ public class MainActivity extends AppCompatActivity {
     private static final String TARGET_DEVICE_NAME = "JBL TUNE660NC";
     private BluetoothAdapter bluetoothAdapter;
     private static final int REQUEST_BLUETOOTH_SCAN_PERMISSION = 101;
+    private ConnectThread connectThread; // Declare connectThread variable
 
 
     @Override
@@ -82,6 +83,15 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
+        Log.d("MainActivity", "onCreate: Checking connection status");
+        if (connectedDevice != null) {
+            Log.d("MainActivity", "onCreate: Device is already connected, disconnecting...");
+            disconnectDevice();
+        } else {
+            Log.d("MainActivity", "onCreate: No device connected");
+        }
+
+
         // Register broadcast receiver for Bluetooth state changes
         IntentFilter filter = new IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED);
         registerReceiver(bluetoothStateReceiver, filter);
@@ -96,7 +106,23 @@ public class MainActivity extends AppCompatActivity {
         updateBluetoothMessage();
     }
 
-
+    private void disconnectDevice() {
+        if (connectedDevice != null) {
+            // Perform disconnection operations here
+            try {
+                // Close the Bluetooth socket
+                if (connectThread != null) {
+                    connectThread.cancel();
+                }
+                // Update UI or perform any other necessary actions
+                bluetoothConnectionStatus.setText("Device disconnected");
+            } catch (Exception e) {
+                Log.e("MainActivity", "Error occurred while disconnecting", e);
+            } finally {
+                connectedDevice = null;
+            }
+        }
+    }
 
     private void checkBluetoothStatus() {
         if (bluetoothAdapter.isEnabled()) {
@@ -178,61 +204,77 @@ public class MainActivity extends AppCompatActivity {
         bluetoothConnectionStatus.setText("Device not found in paired devices");
     }
 
-    private class ConnectThread extends Thread {
+    public class ConnectThread extends Thread {
         private final BluetoothDevice device;
-        private final BluetoothAdapter adapter;
-        private BluetoothAdapter bluetoothAdapter;
-        private BluetoothAdapter tmpAdapter;
-        private BluetoothDevice tmpDevice;
+        private final UUID MY_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
+        private BluetoothSocket socket;
 
         public ConnectThread(BluetoothDevice device) {
             this.device = device;
-            BluetoothAdapter tmpAdapter = null;
             try {
-                tmpAdapter = BluetoothAdapter.getDefaultAdapter();
-            } catch (Exception e) {
-                Log.e("ConnectThread", "BluetoothAdapter getDefaultAdapter() failed", e);
+                if (ActivityCompat.checkSelfPermission(MainActivity.this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                    // Permission hasn't been granted, request it
+                    ActivityCompat.requestPermissions(MainActivity.this, new String[]{Manifest.permission.BLUETOOTH_CONNECT}, REQUEST_BLUETOOTH_PERMISSION);
+                    // After this call, your onRequestPermissionsResult() method will be called
+                    bluetoothStatusTextView.setText("Permissions not granted!");
+                } else {
+                    // Permission has been granted, proceed with your operation
+                    // For example:
+                    // Do something with Bluetooth
+                    // bluetoothStatusTextView.setText("Bluetooth permissions granted on creation!");
+                }
+                socket = device.createRfcommSocketToServiceRecord(MY_UUID);
+            } catch (IOException e) {
+                Log.e("ConnectThread", "Socket creation failed", e);
             }
-            adapter = tmpAdapter;
-            BluetoothDevice tmpDevice = null;
-            try {
-                tmpDevice = device;
-            } catch (Exception e) {
-                Log.e("ConnectThread", "BluetoothDevice creation failed", e);
-            }
-            this.tmpAdapter = adapter;
-            this.tmpDevice = tmpDevice;
         }
 
         public void run() {
-            if (adapter == null || !adapter.isEnabled() || tmpDevice == null) {
+            if (socket == null) {
                 return;
             }
 
-            if (ActivityCompat.checkSelfPermission(MainActivity.this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-                // Permission hasn't been granted, request it
-                ActivityCompat.requestPermissions(MainActivity.this, new String[]{Manifest.permission.BLUETOOTH_CONNECT}, REQUEST_BLUETOOTH_PERMISSION);
-                // After this call, your onRequestPermissionsResult() method will be called
-                bluetoothStatusTextView.setText("Permissions not granted!");
-            } else {
-                // Permission has been granted, proceed with your operation
-                // For example:
-                // Do something with Bluetooth
-                // bluetoothStatusTextView.setText("Bluetooth permissions granted on creation!");
-            }
-
-            adapter.cancelDiscovery();
-
+            // Connect to the Bluetooth device
             try {
-                BluetoothSocket socket = tmpDevice.createRfcommSocketToServiceRecord(MY_UUID);
+                if (ActivityCompat.checkSelfPermission(MainActivity.this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                    // Permission hasn't been granted, request it
+                    ActivityCompat.requestPermissions(MainActivity.this, new String[]{Manifest.permission.BLUETOOTH_CONNECT}, REQUEST_BLUETOOTH_PERMISSION);
+                    // After this call, your onRequestPermissionsResult() method will be called
+                    bluetoothStatusTextView.setText("Permissions not granted!");
+                } else {
+                    // Permission has been granted, proceed with your operation
+                    // For example:
+                    // Do something with Bluetooth
+                    // bluetoothStatusTextView.setText("Bluetooth permissions granted on creation!");
+                }
                 socket.connect();
             } catch (IOException e) {
                 Log.e("ConnectThread", "Socket connection failed", e);
+                // Close the socket in case of failure
+                try {
+                    socket.close();
+                } catch (IOException closeException) {
+                    Log.e("ConnectThread", "Error closing socket", closeException);
+                }
+                return; // Exit run() method if connection fails
+            }
+
+            // Connection success, manage the connection...
+        }
+
+        public void cancel() {
+            try {
+                if (socket != null) {
+                    socket.close(); // Close the socket to disconnect
+                }
+            } catch (IOException e) {
+                Log.e("ConnectThread", "Error when closing socket", e);
             }
         }
     }
 
     private void updateBluetoothMessage() {
+        Log.d("updateBluetoothMessage", "Updating Bluetooth message");
         if (bluetoothAdapter == null) {
             bluetoothStatusTextView.setText("Bluetooth not supported on this device");
         } else {
@@ -268,6 +310,10 @@ public class MainActivity extends AppCompatActivity {
                     if (connectedDevice != null) {
                         String connectedDeviceInfo = "Connected to: " + connectedDevice.getName();
                         bluetoothStatusTextView.append("\n" + connectedDeviceInfo);
+                        Log.d("updateBluetoothMessage", "Connected to device: " + connectedDevice.getName());
+                    } else {
+                        bluetoothStatusTextView.append("\nNot connected to any device");
+                        Log.d("updateBluetoothMessage", "Not connected to any device");
                     }
                 } catch (SecurityException e) {
                     // Handle the SecurityException, e.g., log or notify the user
@@ -283,6 +329,7 @@ public class MainActivity extends AppCompatActivity {
 
 
 
+
     private final BroadcastReceiver bluetoothConnectionReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -290,13 +337,34 @@ public class MainActivity extends AppCompatActivity {
             if (action.equals(BluetoothDevice.ACTION_ACL_CONNECTED)) {
                 BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
                 connectedDevice = device;
-                updateBluetoothMessage(); // Update the Bluetooth message here
+                // Update UI to reflect reconnection
+                updateBluetoothMessage();
             } else if (action.equals(BluetoothDevice.ACTION_ACL_DISCONNECTED)) {
-                connectedDevice = null;
-                updateBluetoothMessage(); // Update the Bluetooth message here
+                BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+                if (device.equals(connectedDevice)) {
+                    // Reset connectedDevice variable when the connected device is disconnected
+                    connectedDevice = null;
+                    // Update the Bluetooth message to reflect the disconnection
+                    updateBluetoothMessage();
+                    if (ActivityCompat.checkSelfPermission(MainActivity.this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                        // Permission hasn't been granted, request it
+                        ActivityCompat.requestPermissions(MainActivity.this, new String[]{Manifest.permission.BLUETOOTH_CONNECT}, REQUEST_BLUETOOTH_PERMISSION);
+                        // After this call, your onRequestPermissionsResult() method will be called
+                        bluetoothStatusTextView.setText("Permissions not granted!");
+                    } else {
+                        // Permission has been granted, proceed with your operation
+                        // For example:
+                        // Do something with Bluetooth
+                        // bluetoothStatusTextView.setText("Bluetooth permissions granted on creation!");
+                    }
+                    Log.d("Bluetooth", "Device disconnected: " + device.getName());
+                }
             }
         }
     };
+
+
+
 
 
     @Override
