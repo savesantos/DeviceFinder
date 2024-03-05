@@ -22,6 +22,8 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.Set;
 import java.util.UUID;
 
@@ -37,7 +39,8 @@ public class MainActivity extends AppCompatActivity {
     private BluetoothAdapter bluetoothAdapter;
     private static final int REQUEST_BLUETOOTH_SCAN_PERMISSION = 101;
     private ConnectThread connectThread; // Declare connectThread variable
-
+    private TextView signalStrengthTextView;
+    private Button calculateDistanceButton;
 
 
     @Override
@@ -62,6 +65,27 @@ public class MainActivity extends AppCompatActivity {
         } else {
             checkBluetoothStatus();
         }
+
+        signalStrengthTextView = findViewById(R.id.distanceTextView);
+        calculateDistanceButton = findViewById(R.id.measureDistanceButton);
+
+        calculateDistanceButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                // Call functions for distance measuring and display the results in the TextView
+                int signalLevel = measureSignalStrength(TARGET_DEVICE_NAME);
+                double distance = calculateDistance(signalLevel);
+                if (signalLevel == -25){
+                    signalStrengthTextView.setText("Bluetooth not supported by device");
+                } else if (signalLevel == -50) {
+                    signalStrengthTextView.setText("Device not paired");
+                } else if (signalLevel == -100){
+                    signalStrengthTextView.setText("Error while obtaining RSSI");
+                } else {
+                    signalStrengthTextView.setText("\nSignal Strength: " + signalLevel + "\nEstimated Distance:\n" + distance + " meters");
+                }
+            }
+        });
 
         Button connectButton = findViewById(R.id.button);
         connectButton.setOnClickListener(new View.OnClickListener() {
@@ -105,6 +129,63 @@ public class MainActivity extends AppCompatActivity {
 
         // Update Bluetooth message to reflect current connection status
         updateBluetoothMessage();
+    }
+
+    // Function to measure signal strength (replace with your implementation)
+    private int measureSignalStrength(String deviceName) {
+        // Check if Bluetooth is supported on the device
+        if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled()) {
+            return -25; // Bluetooth not supported
+        }
+
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+            // Permission hasn't been granted, request it
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.BLUETOOTH_CONNECT}, REQUEST_BLUETOOTH_PERMISSION);
+            // After this call, your onRequestPermissionsResult() method will be called
+            bluetoothStatusTextView.setText("Permissions not granted!");
+        }
+
+        // Get a list of currently paired Bluetooth devices
+        Set<BluetoothDevice> pairedDevices = bluetoothAdapter.getBondedDevices();
+
+        // Iterate through the list to find the specified device
+        for (BluetoothDevice device : pairedDevices) {
+            if (device.getName().equals(deviceName)) {
+                // Use a BluetoothSocket to connect to the device and obtain RSSI
+                try {
+                    // Create a BluetoothSocket for the specified device
+                    BluetoothSocket socket = device.createRfcommSocketToServiceRecord(UUID.randomUUID());
+                    // Connect to the device
+                    socket.connect();
+                    // Get the InputStream and OutputStream from the socket
+                    InputStream inputStream = socket.getInputStream();
+                    OutputStream outputStream = socket.getOutputStream();
+                    // Request RSSI from the device
+                    outputStream.write(0x42); // Arbitrary value to request RSSI
+                    // Read RSSI response from the device
+                    int rssi = inputStream.read();
+                    // Close the socket
+                    socket.close();
+                    // Return the RSSI value
+                    return rssi;
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    // Error occurred while obtaining RSSI
+                    return -100; // Return a default value
+                }
+            }
+        }
+
+        // Device not found among paired devices
+        return -50; // Return a default value
+    }
+
+
+
+    // Function to calculate distance based on signal strength (replace with your implementation)
+    private double calculateDistance(int signalLevel) {
+        // Dummy implementation for demonstration purposes
+        return Math.pow(10, ((-65 - signalLevel) / 20.0)); // Replace this with actual distance calculation
     }
 
     private void disconnectDevice(ConnectThread connectThread) {
