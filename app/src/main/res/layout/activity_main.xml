@@ -11,7 +11,7 @@
         android:id="@+id/textView2"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Device Finder 2.3.0"
+        android:text="DeviceFinder 3.0.0"
         android:textColor="@color/white"
         android:textSize="30sp"
         android:textStyle="bold"
@@ -38,7 +38,7 @@
         app:layout_constraintHorizontal_bias="0.498"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintVertical_bias="0.551" />
+        app:layout_constraintVertical_bias="0.308" />
 
     <TextView
         android:layout_width="wrap_content"
@@ -55,61 +55,11 @@
         app:layout_constraintVertical_bias="0.949"
         tools:ignore="TextSizeCheck" />
 
-    <TextView
-        android:id="@+id/bluetoothStatusTextView"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_margin="8dp"
-        android:layout_marginBottom="116dp"
-        android:gravity="center_horizontal"
-        android:text="Bluetooth Status"
-        android:textColor="@color/white"
-        android:textSize="16sp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.498"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintVertical_bias="0.327" />
-
-    <TextView
-        android:id="@+id/bluetoothConnectionStatus"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_margin="8dp"
-        android:layout_marginBottom="116dp"
-        android:gravity="center_horizontal"
-        android:text="Welcome!"
-        android:textColor="@color/white"
-        android:textSize="16sp"
-        android:textStyle="bold"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintVertical_bias="0.897" />
-
-    <Button
-        android:id="@+id/button"
-        android:layout_width="170dp"
-        android:layout_height="63dp"
-        android:layout_marginBottom="136dp"
-        android:text="CONNECT"
-        android:textSize="20dp"
-        android:textStyle="bold"
-        android:typeface="sans"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.497"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/textView"
-        tools:ignore="UnknownId" />
-
     <Button
         android:id="@+id/measureDistanceButton"
         android:layout_width="246dp"
         android:layout_height="74dp"
-        android:layout_marginBottom="220dp"
+        android:layout_marginBottom="192dp"
         android:text="MEASURE DISTANCE"
         android:textSize="20dp"
         android:textStyle="bold"
@@ -120,5 +70,16 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/textView"
         tools:ignore="UnknownId" />
+
+    <ImageView
+        android:id="@+id/logo"
+        android:layout_width="155dp"
+        android:layout_height="83dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.875"
+        app:srcCompat="@drawable/noslogoinovacao" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
