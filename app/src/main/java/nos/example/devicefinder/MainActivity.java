@@ -68,19 +68,20 @@ public class MainActivity extends AppCompatActivity {
                     // Display signal strength level
                     signalStrengthTextView.append("Signal Strength: " + signalLevel);
 
-                    if (Math.abs(wifiStateExtra) > 24) {
+                    if (Math.abs(wifiStateExtra) > 23) {
 
                         Vibrator vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
 
                         int vibrationAmplitude = calculateVibrationAmplitude(Math.abs(wifiStateExtra));
                         long vibrationDuration = calculateVibrationDuration(Math.abs(wifiStateExtra));
+                        int audioVolume = calculateAudioVolume(Math.abs(wifiStateExtra));
 
                         signalStrengthTextView.append("\n\n Vibration Strength: " + vibrationAmplitude);
 
                         if (vibrator.hasVibrator()) {
                             VibrationEffect effect = VibrationEffect.createOneShot(vibrationDuration, vibrationAmplitude);
                             vibrator.vibrate(effect);
-                            playSoundAndVibrate(Math.abs(wifiStateExtra));
+                            playSoundAndVibrate(Math.abs(wifiStateExtra), audioVolume);
                         }
                     } else {
                         playMarioSong();
@@ -102,9 +103,9 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void playSoundAndVibrate(int value) {
+    private void playSoundAndVibrate(int value, int volume) {
         // Play sound
-        playSound(value);
+        playSound(value, volume);
     }
 
     private void playMarioSong() {
@@ -113,8 +114,8 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void playSound(int value) {
-        ToneGenerator toneGenerator = new ToneGenerator(AudioManager.STREAM_ALARM, 50);
+    private void playSound(int value, int volume) {
+        ToneGenerator toneGenerator = new ToneGenerator(AudioManager.STREAM_ALARM, volume);
         // Map value to frequency
         int frequency = mapValueToFrequency(value);
         // Start tone with specified frequency
@@ -124,16 +125,23 @@ public class MainActivity extends AppCompatActivity {
     private int mapValueToFrequency(int value) {
         // Map the value to a frequency between 20 and 60, with 20 having the lowest frequency and 60 having the highest
         // Use a higher power of the normalized value to increase sensitivity
-        double normalizedValue = 1.0 - (double) (value - 20) / (60 - 20); // Invert the normalization and normalize the value between 0 and 1
+        double normalizedValue = Math.max(0, 1.0 - (double) (value - 20) / (50 - 20)); // Invert the normalization and normalize the value between 0 and 1
         // Adjust the scaling factor to make changes in value more noticeable in the frequency
         int frequencyRange = 1000 - 20; // Define the frequency range
         return (int) (20 + Math.pow(normalizedValue, 4) * frequencyRange); // Map the normalized value to the frequency range
     }
 
+    private int calculateAudioVolume(int value) {
+        // Map value to vibration duration
+        double normalizedValue = (double) Math.max(0, (value - 20) / (50 - 20)); // Normalize the value between 0 and 1
+        // Volume between 100 and 0
+        int frequencyRange = 100 - 0;
+        return (int) (100 - Math.pow(normalizedValue, 4) * frequencyRange);
+    }
 
     private long calculateVibrationDuration(int value) {
         // Map value to vibration duration
-        long normalizedValue = (long) (value - 20) / (50 - 20); // Normalize the value between 0 and 1
+        long normalizedValue = (long) Math.max(0, (value - 20) / (50 - 20)); // Normalize the value between 0 and 1
         // Vibrate for 1 second to 0.1 second based on value
         int frequencyRange = 1000 - 10;
         return (long) 1000 + normalizedValue * frequencyRange;
