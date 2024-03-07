@@ -5,9 +5,12 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
+import android.media.AudioFormat;
+import android.media.AudioTrack;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
@@ -40,6 +43,8 @@ public class MainActivity extends AppCompatActivity {
 
     private DecimalFormat decimalFormat = new DecimalFormat("#.####");
     private MediaPlayer mediaPlayer;
+    private boolean isContinuousFeedbackRunning = false;
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -58,34 +63,14 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onClick(View v) {
                 if (hasPermissions()) {
-                    int wifiStateExtra = wifiManager.getConnectionInfo().getRssi();
-
-                    // Display signal strength level
-                    signalStrengthTextView.setText("RSSI: " + wifiStateExtra + "\n\n");
-
-                    int signalLevel = WifiManager.calculateSignalLevel(wifiStateExtra, 5);
-
-                    // Display signal strength level
-                    signalStrengthTextView.append("Signal Strength: " + signalLevel);
-
-                    if (Math.abs(wifiStateExtra) > 23) {
-
-                        Vibrator vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
-
-                        int vibrationAmplitude = calculateVibrationAmplitude(Math.abs(wifiStateExtra));
-                        long vibrationDuration = calculateVibrationDuration(Math.abs(wifiStateExtra));
-                        int audioVolume = calculateAudioVolume(Math.abs(wifiStateExtra));
-
-                        signalStrengthTextView.append("\n\n Vibration Strength: " + vibrationAmplitude);
-
-                        if (vibrator.hasVibrator()) {
-                            VibrationEffect effect = VibrationEffect.createOneShot(vibrationDuration, vibrationAmplitude);
-                            vibrator.vibrate(effect);
-                            playSoundAndVibrate(Math.abs(wifiStateExtra), audioVolume);
-                        }
+                    if (!isContinuousFeedbackRunning) {
+                        // Start continuous feedback
+                        isContinuousFeedbackRunning = true;
+                        // Change button text to indicate continuous feedback is running
+                        measureDistanceButton.setText("STOP SEARCH");
+                        startContinuousFeedback();
                     } else {
-                        playMarioSong();
-                        signalStrengthTextView.append("\n\n  Congratulations, you found the router!");
+                        stopContinuousFeedback(); // Stop continuous feedback if signal strength is low
                     }
                 } else {
                     requestPermissions();
@@ -103,9 +88,108 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void playSoundAndVibrate(int value, int volume) {
-        // Play sound
-        playSound(value, volume);
+    private void startContinuousFeedback() {
+        final Vibrator vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+
+        // Sample rate for audio track
+        int sampleRate = 44100;
+        int bufferSize = AudioTrack.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT);
+
+        // Initialize AudioTrack
+        AudioTrack audioTrack = new AudioTrack(AudioManager.STREAM_ALARM, sampleRate,
+                AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT,
+                bufferSize, AudioTrack.MODE_STREAM);
+
+        // Check if initialization was successful
+        if (audioTrack.getState() == AudioTrack.STATE_INITIALIZED) {
+            // Start playback
+            audioTrack.play();
+        } else {
+            // Handle initialization error
+            Log.e("MyAudioPlayer", "AudioTrack initialization failed");
+        }
+
+        int wifiStateExtra = 120;
+
+        // Start a new thread for continuous feedback
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                while (isContinuousFeedbackRunning && wifiStateExtra > 25) { // Check the flag before each iteration
+                    int wifiStateExtra = wifiManager.getConnectionInfo().getRssi();
+
+                    runOnUiThread(new Runnable() { // Updating UI inside runOnUiThread
+                        @Override
+                        public void run() {
+                            // Display signal strength level
+                            signalStrengthTextView.setText("RSSI: " + wifiStateExtra + "\n\n");
+
+                            int signalLevel = WifiManager.calculateSignalLevel(wifiStateExtra, 5);
+
+                            // Display signal strength level
+                            signalStrengthTextView.append("Signal Strength: " + signalLevel);
+                        }
+                    });
+
+                    int vibrationAmplitude = calculateVibrationAmplitude(Math.abs(wifiStateExtra));
+                    long vibrationDuration = calculateVibrationDuration(Math.abs(wifiStateExtra));
+
+                    if (vibrator.hasVibrator()) {
+                        // Define the pattern for continuous vibration (e.g., on-off-on-off pattern)
+                        long[] pattern = {0, vibrationDuration};
+
+                        // Create a waveform vibration effect
+                        VibrationEffect effect = VibrationEffect.createWaveform(pattern, vibrationAmplitude);
+                        vibrator.vibrate(effect);
+                    }
+
+                    // Generate and play tone
+                    double frequency = mapValueToFrequency(Math.abs(wifiStateExtra));
+                    double volume = mapValueToVolume(calculateAudioVolume(Math.abs(wifiStateExtra)));
+
+                    short[] buffer = new short[bufferSize];
+                    for (int i = 0; i < bufferSize; i++) {
+                        double sample = Math.sin(2 * Math.PI * i * frequency / sampleRate);
+                        buffer[i] = (short) (sample * Short.MAX_VALUE * volume);
+                    }
+
+                    audioTrack.write(buffer, 0, bufferSize);
+
+                    try {
+                        // Wait for a short duration before the next feedback
+                        Thread.sleep(1000); // Adjust this value as needed
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+                // Release resources or perform any necessary cleanup here
+                vibrator.cancel(); // Cancel vibration when the thread exits
+                audioTrack.stop(); // Stop audio track when the thread exits
+                audioTrack.release(); // Release audio track resources
+
+                if (wifiStateExtra < 26){
+                    playMarioSong();
+                    isContinuousFeedbackRunning = false;
+
+                    // UI update when the thread is done
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            // Update UI after thread completion
+                            signalStrengthTextView.append("\n\n  Congratulations, you found the router!");
+                            measureDistanceButton.setText("START SEARCH");
+                        }
+                    });
+                }
+            }
+        }).start();
+    }
+
+
+    private void stopContinuousFeedback() {
+        // Implement this method to stop the continuous feedback loop
+        isContinuousFeedbackRunning = false; // Update the flag
+        measureDistanceButton.setText("START SEARCH");
     }
 
     private void playMarioSong() {
@@ -114,46 +198,47 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void playSound(int value, int volume) {
-        ToneGenerator toneGenerator = new ToneGenerator(AudioManager.STREAM_ALARM, volume);
-        // Map value to frequency
-        int frequency = mapValueToFrequency(value);
-        // Start tone with specified frequency
-        toneGenerator.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, frequency); // Adjust tone type as needed
-    }
-
     private int mapValueToFrequency(int value) {
         // Map the value to a frequency between 20 and 60, with 20 having the lowest frequency and 60 having the highest
         // Use a higher power of the normalized value to increase sensitivity
-        double normalizedValue = Math.max(0, 1.0 - (double) (value - 20) / (50 - 20)); // Invert the normalization and normalize the value between 0 and 1
+        double normalizedValue = Math.min(1, Math.max(0, 1.0 - (double) (value - 20) / (70 - 20))); // Invert the normalization and normalize the value between 0 and 1
         // Adjust the scaling factor to make changes in value more noticeable in the frequency
-        int frequencyRange = 1000 - 20; // Define the frequency range
+        int frequencyRange = 5000 - 20; // Define the frequency range
         return (int) (20 + Math.pow(normalizedValue, 4) * frequencyRange); // Map the normalized value to the frequency range
     }
 
+    private double mapValueToVolume(int value) {
+        // Map signal strength to volume level (0.0-1.0)
+        double volume = Math.min(100.0, Math.max(0.0, (double) value / 100.0)); // Assuming value is a percentage (0-100)
+        return volume;
+    }
+
     private int calculateAudioVolume(int value) {
-        // Map value to vibration duration
-        double normalizedValue = (double) Math.max(0, (value - 20) / (50 - 20)); // Normalize the value between 0 and 1
-        // Volume between 100 and 0
-        int frequencyRange = 100 - 0;
-        return (int) (100 - Math.pow(normalizedValue, 4) * frequencyRange);
+        // Map value to volume level
+        // Normalize the value between 0 and 1
+        double normalizedValue = (double) Math.min(1, Math.max(0, 1 - (value - 20) / (70 - 20)));
+        // Define the volume range (0-100)
+        int volumeRange = 50;
+        // Map the normalized value to the volume range
+        return (int) (normalizedValue * volumeRange);
     }
 
     private long calculateVibrationDuration(int value) {
         // Map value to vibration duration
-        long normalizedValue = (long) Math.max(0, (value - 20) / (50 - 20)); // Normalize the value between 0 and 1
+        long normalizedValue = (long) Math.min(1, Math.max(0, (value - 20) / (70 - 20))); // Normalize the value between 0 and 1
         // Vibrate for 1 second to 0.1 second based on value
         int frequencyRange = 1000 - 10;
-        return (long) 1000 + normalizedValue * frequencyRange;
+        return (long) 10 + (long) Math.pow(normalizedValue, 4) * frequencyRange;
     }
 
     private int calculateVibrationAmplitude(int value) {
-        // You can adjust this formula as per your requirement
-        // For example, you can use a linear scale to map the integer value to vibration amplitude
-        // The lower the value, the higher the vibration amplitude
-        // You can experiment with different formulas to get the desired effect
-        return Math.max(0, Math.min(255, 255 - (value - 20) * 51 / 8)); // Example formula
+        double normalizedValue = (double) Math.min(1, Math.max(0, (value - 20) / (70 - 20))); // Normalize the value between 0 and 1
+        int frequencyRange = 1;
+        int vibrationAmplitude = (int) (1 - Math.pow(normalizedValue, 4) * frequencyRange); // Calculate vibration amplitude
+        Log.d("VibrationAmplitude", "Amplitude calculated: " + vibrationAmplitude); // Log the result
+        return vibrationAmplitude;
     }
+
 
     private boolean hasPermissions() {
         int result;
