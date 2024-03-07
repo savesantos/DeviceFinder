@@ -11,7 +11,7 @@
         android:id="@+id/textView2"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Wifi DeviceFinder\n5.2.0"
+        android:text="Wifi DeviceFinder\n6.0.0"
         android:gravity="center_horizontal"
         android:textColor="@color/white"
         android:textSize="30sp"
