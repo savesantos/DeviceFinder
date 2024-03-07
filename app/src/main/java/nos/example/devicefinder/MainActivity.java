@@ -118,7 +118,7 @@ public class MainActivity extends AppCompatActivity {
 
                     int wifiStateExtra = wifiManager.getConnectionInfo().getRssi();
 
-                    if (wifiStateExtra < -25) {
+                    if (wifiStateExtra < -23) {
                         runOnUiThread(new Runnable() { // Updating UI inside runOnUiThread
                             @Override
                             public void run() {
@@ -154,7 +154,7 @@ public class MainActivity extends AppCompatActivity {
                         audioTrack.write(buffer, 0, bufferSize);
                     }
 
-                    if (wifiStateExtra > -26){
+                    if (wifiStateExtra > -24){
                         playMarioSong();
                         isContinuousFeedbackRunning = false;
 
@@ -217,11 +217,27 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private int calculateSoundInterval(int value) {
-        double normalizedValue = (double) Math.min(1, Math.max(0, (value - 20) / (60 - 20))); // Normalize the value between 0 and 1
-        int frequencyRange = 2000 - 500;
-        int vibrationAmplitude = (int) (500 + Math.pow(normalizedValue, 4) * frequencyRange); // Calculate vibration amplitude
-        Log.d("VibrationAmplitude", "Amplitude calculated: " + vibrationAmplitude); // Log the result
-        return vibrationAmplitude;
+        if (value < 30){
+            return 250;
+        } else if (value < 35 && value >= 30) {
+            return 400;
+        } else if (value < 40 && value >= 35) {
+            return 650;
+        } else if (value < 45 && value >= 40) {
+            return 800;
+        } else if (value < 55 && value >= 45) {
+            return 950;
+        } else if (value < 60 && value >= 55) {
+            return 1100;
+        } else if (value >= 60 && value < 70){
+            return 1350;
+        } else if (value >= 70 && value < 80) {
+            return 1500;
+        } else if (value >= 90 && value < 80) {
+            return 1750;
+        } else {
+            return 2000;
+        }
     }
 
     private boolean hasPermissions() {
