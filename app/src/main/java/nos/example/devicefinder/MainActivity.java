@@ -109,52 +109,71 @@ public class MainActivity extends AppCompatActivity {
             Log.e("MyAudioPlayer", "AudioTrack initialization failed");
         }
 
-        int wifiStateExtra = 120;
-
         // Start a new thread for continuous feedback
         new Thread(new Runnable() {
+
             @Override
             public void run() {
-                while (isContinuousFeedbackRunning && wifiStateExtra > 25) { // Check the flag before each iteration
+                while (isContinuousFeedbackRunning) { // Check the flag before each iteration
+
                     int wifiStateExtra = wifiManager.getConnectionInfo().getRssi();
 
-                    runOnUiThread(new Runnable() { // Updating UI inside runOnUiThread
-                        @Override
-                        public void run() {
-                            // Display signal strength level
-                            signalStrengthTextView.setText("RSSI: " + wifiStateExtra + "\n\n");
+                    if (wifiStateExtra < -25) {
+                        runOnUiThread(new Runnable() { // Updating UI inside runOnUiThread
+                            @Override
+                            public void run() {
+                                // Display signal strength level
+                                signalStrengthTextView.setText("RSSI: " + wifiStateExtra + "\n\n");
 
-                            int signalLevel = WifiManager.calculateSignalLevel(wifiStateExtra, 5);
+                                int signalLevel = WifiManager.calculateSignalLevel(wifiStateExtra, 5);
 
-                            // Display signal strength level
-                            signalStrengthTextView.append("Signal Strength: " + signalLevel);
+                                // Display signal strength level
+                                signalStrengthTextView.append("Signal Strength: " + signalLevel);
+                            }
+                        });
+
+                        int vibrationAmplitude = calculateVibrationAmplitude(Math.abs(wifiStateExtra));
+                        int vibrationDuration = 100;
+
+                        if (vibrator.hasVibrator()) {
+                            // Create a waveform vibration effect
+                            VibrationEffect effect = VibrationEffect.createOneShot(vibrationDuration, vibrationAmplitude);
+                            vibrator.vibrate(effect);
                         }
-                    });
 
-                    int vibrationAmplitude = calculateVibrationAmplitude(Math.abs(wifiStateExtra));
-                    int vibrationDuration = 100;
+                        // Generate and play tone
+                        double frequency = mapValueToFrequency(Math.abs(wifiStateExtra));
+                        double volume = 0.05;
 
-                    if (vibrator.hasVibrator()) {
-                        // Create a waveform vibration effect
-                        VibrationEffect effect = VibrationEffect.createOneShot(vibrationDuration, vibrationAmplitude);
-                        vibrator.vibrate(effect);
+                        short[] buffer = new short[bufferSize];
+                        for (int i = 0; i < bufferSize; i++) {
+                            double sample = Math.sin(2 * Math.PI * i * frequency / sampleRate);
+                            buffer[i] = (short) (sample * Short.MAX_VALUE * volume);
+                        }
+
+                        audioTrack.write(buffer, 0, bufferSize);
                     }
 
-                    // Generate and play tone
-                    double frequency = mapValueToFrequency(Math.abs(wifiStateExtra));
-                    double volume = 0.04;
+                    if (wifiStateExtra > -26){
+                        playMarioSong();
+                        isContinuousFeedbackRunning = false;
 
-                    short[] buffer = new short[bufferSize];
-                    for (int i = 0; i < bufferSize; i++) {
-                        double sample = Math.sin(2 * Math.PI * i * frequency / sampleRate);
-                        buffer[i] = (short) (sample * Short.MAX_VALUE * volume);
+                        // UI update when the thread is done
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                // Update UI after thread completion
+                                signalStrengthTextView.setText("\n\n  Congratulations, you found the router!\n");
+                                signalStrengthTextView.append("RSSI: " + wifiStateExtra);
+                                measureDistanceButton.setText("START SEARCH");
+                            }
+                        });
                     }
-
-                    audioTrack.write(buffer, 0, bufferSize);
 
                     try {
+                        int intervalSound = calculateSoundInterval(Math.abs(wifiStateExtra));
                         // Wait for a short duration before the next feedback
-                        Thread.sleep(1000); // Adjust this value as needed
+                        Thread.sleep(intervalSound); // Adjust this value as needed
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
@@ -163,21 +182,6 @@ public class MainActivity extends AppCompatActivity {
                 vibrator.cancel(); // Cancel vibration when the thread exits
                 audioTrack.stop(); // Stop audio track when the thread exits
                 audioTrack.release(); // Release audio track resources
-
-                if (wifiStateExtra < 26){
-                    playMarioSong();
-                    isContinuousFeedbackRunning = false;
-
-                    // UI update when the thread is done
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            // Update UI after thread completion
-                            signalStrengthTextView.append("\n\n  Congratulations, you found the router!");
-                            measureDistanceButton.setText("START SEARCH");
-                        }
-                    });
-                }
             }
         }).start();
     }
@@ -200,8 +204,8 @@ public class MainActivity extends AppCompatActivity {
         // Use a higher power of the normalized value to increase sensitivity
         double normalizedValue = Math.min(1, Math.max(0, 1.0 - (double) (value - 20) / (80 - 20))); // Invert the normalization and normalize the value between 0 and 1
         // Adjust the scaling factor to make changes in value more noticeable in the frequency
-        int frequencyRange = 5000 - 100; // Define the frequency range
-        return (int) (20 + Math.pow(normalizedValue, 4) * frequencyRange); // Map the normalized value to the frequency range
+        int frequencyRange = 5000 - 1000; // Define the frequency range
+        return (int) (1000 + Math.pow(normalizedValue, 4) * frequencyRange); // Map the normalized value to the frequency range
     }
 
     private int calculateVibrationAmplitude(int value) {
@@ -212,6 +216,13 @@ public class MainActivity extends AppCompatActivity {
         return vibrationAmplitude;
     }
 
+    private int calculateSoundInterval(int value) {
+        double normalizedValue = (double) Math.min(1, Math.max(0, (value - 20) / (60 - 20))); // Normalize the value between 0 and 1
+        int frequencyRange = 2000 - 500;
+        int vibrationAmplitude = (int) (500 + Math.pow(normalizedValue, 4) * frequencyRange); // Calculate vibration amplitude
+        Log.d("VibrationAmplitude", "Amplitude calculated: " + vibrationAmplitude); // Log the result
+        return vibrationAmplitude;
+    }
 
     private boolean hasPermissions() {
         int result;
