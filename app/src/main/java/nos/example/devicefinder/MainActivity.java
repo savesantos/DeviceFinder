@@ -7,12 +7,17 @@ import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.media.AudioFormat;
 import android.media.AudioTrack;
+import android.net.wifi.ScanResult;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.ListView;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.Manifest;
 import android.os.VibrationEffect;
@@ -27,13 +32,14 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
 import java.text.DecimalFormat;
+import java.util.ArrayList;
+import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
 
     private WifiManager wifiManager;
     private TextView signalStrengthTextView;
     private Button measureDistanceButton;
-    private BroadcastReceiver wifiReceiver;
 
     private static final int PERMISSION_REQUEST_CODE = 200;
     private static final String[] REQUIRED_PERMISSIONS = {
@@ -44,6 +50,10 @@ public class MainActivity extends AppCompatActivity {
     private DecimalFormat decimalFormat = new DecimalFormat("#.####");
     private MediaPlayer mediaPlayer;
     private boolean isContinuousFeedbackRunning = false;
+    private ArrayList<ScanResult> wifiArrayList = new ArrayList<>();
+    private ArrayAdapter<String> adapter;
+    private Spinner spinner; // Change from ListView to Spinner
+    private ScanResult selectedNetwork;
 
 
     @Override
@@ -51,10 +61,41 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        spinner = findViewById(R.id.spinner); // Initialize Spinner
         signalStrengthTextView = findViewById(R.id.distanceTextView);
         measureDistanceButton = findViewById(R.id.measureDistanceButton);
 
+        // Update ArrayAdapter initialization
+        adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, getSSIDList());
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spinner.setAdapter(adapter);
+
         wifiManager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+
+        if (!wifiManager.isWifiEnabled()) {
+            // If Wi-Fi is disabled, enable it
+            wifiManager.setWifiEnabled(true);
+        }
+
+        // Register BroadcastReceiver for scan results
+        registerReceiver(wifiReceiver, new IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION));
+
+        // Start scanning for Wi-Fi networks
+        wifiManager.startScan();
+
+        // Listen for item selection events on the Spinner
+        spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> adapterView, View view, int position, long id) {
+                // Retrieve the selected network
+                selectedNetwork = wifiArrayList.get(position);
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> adapterView) {
+                // Handle case when nothing is selected
+            }
+        });
 
         // Initialize MediaPlayer
         mediaPlayer = MediaPlayer.create(this, R.raw.mario_song);
@@ -68,9 +109,12 @@ public class MainActivity extends AppCompatActivity {
                         isContinuousFeedbackRunning = true;
                         // Change button text to indicate continuous feedback is running
                         measureDistanceButton.setText("STOP SEARCH");
+                        // Disable Spinner
+                        spinner.setEnabled(false);
                         startContinuousFeedback();
                     } else {
-                        stopContinuousFeedback(); // Stop continuous feedback if signal strength is low
+                        spinner.setEnabled(true);
+                        stopContinuousFeedback();
                     }
                 } else {
                     requestPermissions();
@@ -86,6 +130,30 @@ public class MainActivity extends AppCompatActivity {
         if (wifiReceiver != null) {
             unregisterReceiver(wifiReceiver);
         }
+    }
+
+    BroadcastReceiver wifiReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            wifiArrayList.clear();
+            wifiArrayList.addAll(wifiManager.getScanResults());
+            // Update the adapter with the new data
+            adapter.clear();
+            adapter.addAll(getSSIDList());
+            adapter.notifyDataSetChanged();
+        }
+    };
+
+    // Helper method to extract SSID names from the scan results
+    private ArrayList<String> getSSIDList() {
+        ArrayList<String> ssidList = new ArrayList<>();
+        if (wifiManager != null) {
+            List<ScanResult> scanResults = wifiManager.getScanResults();
+            for (ScanResult scanResult : scanResults) {
+                ssidList.add(scanResult.SSID);
+            }
+        }
+        return ssidList;
     }
 
     private void startContinuousFeedback() {
@@ -115,69 +183,84 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void run() {
                 while (isContinuousFeedbackRunning) { // Check the flag before each iteration
+                    // Retrieve and display the RSSI of the selected network
+                    if (selectedNetwork != null) { // Add null check here
+                        // Retrieve and display the RSSI of the selected network
+                        int wifiStateExtra = selectedNetwork.level;
 
-                    int wifiStateExtra = wifiManager.getConnectionInfo().getRssi();
+                        if (wifiStateExtra < -23) {
+                            runOnUiThread(new Runnable() { // Updating UI inside runOnUiThread
+                                @Override
+                                public void run() {
+                                    // Display signal strength level
+                                    signalStrengthTextView.setText("RSSI: " + wifiStateExtra + "\n\n");
 
-                    if (wifiStateExtra < -23) {
-                        runOnUiThread(new Runnable() { // Updating UI inside runOnUiThread
-                            @Override
-                            public void run() {
-                                // Display signal strength level
-                                signalStrengthTextView.setText("RSSI: " + wifiStateExtra + "\n\n");
+                                    int signalLevel = WifiManager.calculateSignalLevel(wifiStateExtra, 5);
 
-                                int signalLevel = WifiManager.calculateSignalLevel(wifiStateExtra, 5);
+                                    // Display signal strength level
+                                    signalStrengthTextView.append("Signal Strength: " + signalLevel);
+                                }
+                            });
 
-                                // Display signal strength level
-                                signalStrengthTextView.append("Signal Strength: " + signalLevel);
+                            int vibrationAmplitude = calculateVibrationAmplitude(Math.abs(wifiStateExtra));
+                            int vibrationDuration = 100;
+
+                            if (vibrator.hasVibrator()) {
+                                // Create a waveform vibration effect
+                                VibrationEffect effect = VibrationEffect.createOneShot(vibrationDuration, vibrationAmplitude);
+                                vibrator.vibrate(effect);
                             }
-                        });
 
-                        int vibrationAmplitude = calculateVibrationAmplitude(Math.abs(wifiStateExtra));
-                        int vibrationDuration = 100;
+                            // Generate and play tone
+                            double frequency = mapValueToFrequency(Math.abs(wifiStateExtra));
+                            double volume = 0.05;
 
-                        if (vibrator.hasVibrator()) {
-                            // Create a waveform vibration effect
-                            VibrationEffect effect = VibrationEffect.createOneShot(vibrationDuration, vibrationAmplitude);
-                            vibrator.vibrate(effect);
+                            short[] buffer = new short[bufferSize];
+                            for (int i = 0; i < bufferSize; i++) {
+                                double sample = Math.sin(2 * Math.PI * i * frequency / sampleRate);
+                                buffer[i] = (short) (sample * Short.MAX_VALUE * volume);
+                            }
+
+                            audioTrack.write(buffer, 0, bufferSize);
                         }
 
-                        // Generate and play tone
-                        double frequency = mapValueToFrequency(Math.abs(wifiStateExtra));
-                        double volume = 0.05;
+                        if (wifiStateExtra > -24) {
+                            playMarioSong();
+                            isContinuousFeedbackRunning = false;
 
-                        short[] buffer = new short[bufferSize];
-                        for (int i = 0; i < bufferSize; i++) {
-                            double sample = Math.sin(2 * Math.PI * i * frequency / sampleRate);
-                            buffer[i] = (short) (sample * Short.MAX_VALUE * volume);
+                            // UI update when the thread is done
+                            runOnUiThread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    // Update UI after thread completion
+                                    signalStrengthTextView.setText("\n\n  Congratulations, you found the router!\n");
+                                    signalStrengthTextView.append("RSSI: " + wifiStateExtra);
+                                    measureDistanceButton.setText("START SEARCH");
+                                }
+                            });
                         }
 
-                        audioTrack.write(buffer, 0, bufferSize);
-                    }
-
-                    if (wifiStateExtra > -24){
-                        playMarioSong();
-                        isContinuousFeedbackRunning = false;
-
+                        try {
+                            int intervalSound = calculateSoundInterval(Math.abs(wifiStateExtra));
+                            // Wait for a short duration before the next feedback
+                            Thread.sleep(intervalSound); // Adjust this value as needed
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+                    } else {
                         // UI update when the thread is done
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
                                 // Update UI after thread completion
-                                signalStrengthTextView.setText("\n\n  Congratulations, you found the router!\n");
-                                signalStrengthTextView.append("RSSI: " + wifiStateExtra);
+                                signalStrengthTextView.setText("Wifi network not selected\nPlease choose one from the list");
                                 measureDistanceButton.setText("START SEARCH");
                             }
                         });
-                    }
-
-                    try {
-                        int intervalSound = calculateSoundInterval(Math.abs(wifiStateExtra));
-                        // Wait for a short duration before the next feedback
-                        Thread.sleep(intervalSound); // Adjust this value as needed
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
+                        isContinuousFeedbackRunning = false;
                     }
                 }
+
                 // Release resources or perform any necessary cleanup here
                 vibrator.cancel(); // Cancel vibration when the thread exits
                 audioTrack.stop(); // Stop audio track when the thread exits
@@ -191,6 +274,7 @@ public class MainActivity extends AppCompatActivity {
         // Implement this method to stop the continuous feedback loop
         isContinuousFeedbackRunning = false; // Update the flag
         measureDistanceButton.setText("START SEARCH");
+        spinner.setEnabled(true); // Re-enable the Spinner
     }
 
     private void playMarioSong() {
