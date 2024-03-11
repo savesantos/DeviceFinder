@@ -183,8 +183,24 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void run() {
                 while (isContinuousFeedbackRunning) { // Check the flag before each iteration
+
+                    // Retrieve the selected network
+                    int selectedPosition = spinner.getSelectedItemPosition();
+                    if (selectedPosition != AdapterView.INVALID_POSITION && selectedPosition < wifiArrayList.size()) {
+                        selectedNetwork = wifiArrayList.get(selectedPosition);
+                    } else {
+                        Log.e("ContinuousFeedback", "Invalid selected position or wifiArrayList size");
+                    }
+
+                    // Log the size of wifiArrayList
+                    Log.d("ContinuousFeedback", "wifiArrayList size: " + wifiArrayList.size());
+
                     // Retrieve and display the RSSI of the selected network
                     if (selectedNetwork != null) { // Add null check here
+
+                        // Log details of the selected network
+                        Log.d("ContinuousFeedback", "Selected network: " + selectedNetwork.SSID + ", RSSI: " + selectedNetwork.level);
+
                         // Retrieve and display the RSSI of the selected network
                         int wifiStateExtra = selectedNetwork.level;
 
