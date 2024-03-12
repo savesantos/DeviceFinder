@@ -25,6 +25,7 @@ import android.os.Vibrator;
 import android.media.AudioManager;
 import android.media.ToneGenerator;
 import android.media.MediaPlayer;
+import android.os.Handler;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
@@ -54,6 +55,8 @@ public class MainActivity extends AppCompatActivity {
     private ArrayAdapter<String> adapter;
     private Spinner spinner; // Change from ListView to Spinner
     private ScanResult selectedNetwork;
+    private Handler mHandler = new Handler();
+    private int wifiStateExtra = -200;
 
 
     @Override
@@ -80,8 +83,8 @@ public class MainActivity extends AppCompatActivity {
         // Register BroadcastReceiver for scan results
         registerReceiver(wifiReceiver, new IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION));
 
-        // Start scanning for Wi-Fi networks
-        wifiManager.startScan();
+        // Schedule the first scan immediately
+        mHandler.post(scanRunnable);
 
         // Listen for item selection events on the Spinner
         spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
@@ -126,17 +129,37 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        // Remove any pending callbacks to avoid memory leaks
+        mHandler.removeCallbacks(scanRunnable);
         // Unregister the broadcast receiver when the activity is destroyed to avoid memory leaks
         if (wifiReceiver != null) {
             unregisterReceiver(wifiReceiver);
         }
     }
 
+    // Define a Runnable to initiate the scan
+    private Runnable scanRunnable = new Runnable() {
+        @Override
+        public void run() {
+            // Start scanning for Wi-Fi networks
+            wifiManager.startScan();
+
+            Log.d("startScan", "SCANNING");
+
+            // Schedule the next scan after 30 seconds
+            mHandler.postDelayed(this, 30 * 1000); // 30 seconds in milliseconds
+        }
+    };
+
     BroadcastReceiver wifiReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
+            // Clear the existing list before adding new scan results
             wifiArrayList.clear();
+
+            // Add the new scan results to the list
             wifiArrayList.addAll(wifiManager.getScanResults());
+
             // Update the adapter with the new data
             adapter.clear();
             adapter.addAll(getSSIDList());
@@ -184,32 +207,29 @@ public class MainActivity extends AppCompatActivity {
             public void run() {
                 while (isContinuousFeedbackRunning) { // Check the flag before each iteration
 
-                    // Retrieve the selected network
-                    int selectedPosition = spinner.getSelectedItemPosition();
-                    if (selectedPosition != AdapterView.INVALID_POSITION && selectedPosition < wifiArrayList.size()) {
-                        selectedNetwork = wifiArrayList.get(selectedPosition);
-                    } else {
-                        Log.e("ContinuousFeedback", "Invalid selected position or wifiArrayList size");
-                    }
-
-                    // Log the size of wifiArrayList
-                    Log.d("ContinuousFeedback", "wifiArrayList size: " + wifiArrayList.size());
-
                     // Retrieve and display the RSSI of the selected network
                     if (selectedNetwork != null) { // Add null check here
 
                         // Log details of the selected network
                         Log.d("ContinuousFeedback", "Selected network: " + selectedNetwork.SSID + ", RSSI: " + selectedNetwork.level);
 
-                        // Retrieve and display the RSSI of the selected network
-                        int wifiStateExtra = selectedNetwork.level;
+                        List<ScanResult> scanResults = wifiManager.getScanResults();
+                        for (ScanResult result : scanResults) {
+                            if (selectedNetwork != null && result.SSID.equals(selectedNetwork.SSID)) {
+                                // Access RSSI value
+                                wifiStateExtra = result.level;
+                                // Log details of the selected network
+                                Log.d("ContinuousFeedback", "Selected network: " + selectedNetwork.SSID + ", RSSI: " + wifiStateExtra);
+                                break;
+                            }
+                        }
 
                         if (wifiStateExtra < -23) {
                             runOnUiThread(new Runnable() { // Updating UI inside runOnUiThread
                                 @Override
                                 public void run() {
                                     // Display signal strength level
-                                    signalStrengthTextView.setText("RSSI: " + wifiStateExtra + "\n\n");
+                                    signalStrengthTextView.setText("Wifi Network: " + selectedNetwork.SSID +  "\n\nRSSI: " + wifiStateExtra + "\n\n");
 
                                     int signalLevel = WifiManager.calculateSignalLevel(wifiStateExtra, 5);
 
