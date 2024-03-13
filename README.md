@@ -43,4 +43,4 @@ Contributions to the project are welcome! If you encounter any bugs, have sugges
 5. Submit a pull request referencing the related issue(s).
 
 ## Contact
-For questions, support, or further information, please contact the project maintainer at [email@example.com](salvador.santos@nos.pt).
+For questions, support, or further information, please contact the project maintainer at [salvador.santos@nos.pt](salvador.santos@nos.pt).
