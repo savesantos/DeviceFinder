@@ -1,6 +1,6 @@
 # DeviceFinder
 
-How can a blind person find its Bluetooth devices in an accessible and smooth way? That's exactly the challenge this project wants to tackle by gamifying the whole process of locating the device. In this sense, the proposed game takes inspiration from the famous children's game, hot and cold, thereby having the user's phone give active feedback about the distance to the device. This feedback must be as tactile or sonorous as possible, making it accessible to users with hearing disabilities.
+How can a blind person find its Wifi devices in an accessible and smooth way? That's exactly the challenge this project wants to tackle by gamifying the whole process of locating the device. In this sense, the proposed game takes inspiration from the famous children's game, hot and cold, thereby having the user's phone give active feedback about the distance to the device. This feedback must be as tactile or sonorous as possible, making it accessible to users with visual disabilities.
 
 ## Table of Contents
 1. [Installation](#installation)
