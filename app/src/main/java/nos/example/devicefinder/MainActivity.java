@@ -8,6 +8,8 @@ import android.content.pm.PackageManager;
 import android.media.AudioFormat;
 import android.media.AudioTrack;
 import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
 import android.net.NetworkInfo;
 import android.net.wifi.ScanResult;
 import android.net.wifi.WifiConfiguration;
@@ -49,7 +51,8 @@ public class MainActivity extends AppCompatActivity {
     private static final String[] REQUIRED_PERMISSIONS = {
             Manifest.permission.ACCESS_WIFI_STATE,
             Manifest.permission.ACCESS_COARSE_LOCATION,
-            Manifest.permission.ACCESS_FINE_LOCATION};
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.CHANGE_WIFI_STATE};
 
     private DecimalFormat decimalFormat = new DecimalFormat("#.####");
     private MediaPlayer mediaPlayer;
@@ -96,6 +99,7 @@ public class MainActivity extends AppCompatActivity {
                 selectedNetwork = wifiArrayList.get(position);
                 // Connect to the selected Wi-Fi network
                 connectToWifi(selectedNetwork.BSSID);
+                Log.d("BSSID", "BSSID Selected: " + selectedNetwork.BSSID);
             }
 
             @Override
@@ -117,8 +121,8 @@ public class MainActivity extends AppCompatActivity {
                         // Change button text to indicate continuous feedback is running
                         measureDistanceButton.setText("STOP SEARCH");
                         // Disable Spinner
-                        spinner.setEnabled(false);
                         startContinuousFeedback();
+                        spinner.setEnabled(false);
                     } else {
                         spinner.setEnabled(true);
                         stopContinuousFeedback();
@@ -164,14 +168,17 @@ public class MainActivity extends AppCompatActivity {
             WifiInfo wifiInfo = wifiManager.getConnectionInfo();
 
             // Get the SSID of the currently connected network
-            String ssid = wifiInfo.getSSID();
+            String ssidWithQuotes = wifiInfo.getSSID();
+            // Remove quotes from SSID
+            String ssid = ssidWithQuotes.replaceAll("^\"|\"$", "");
+            Log.d("ssid", "getSSID: " + ssid);
 
             // Loop throughhe scan results
             for (ScanResult result : scanResults) {
-                // Check if the SSID matches the specific SSID you want
                 if (result.SSID.equals(ssid)) {
                     // Add the scan result to the list
                     wifiArrayList.add(result);
+                    Log.d("BSSID", "BSSID " + result.BSSID);
                 }
             }
 
@@ -192,10 +199,14 @@ public class MainActivity extends AppCompatActivity {
             WifiInfo wifiInfo = wifiManager.getConnectionInfo();
 
             // Get the SSID of the currently connected network
-            String ssid = wifiInfo.getSSID();
+            String ssidWithQuotes = wifiInfo.getSSID();
+            // Remove quotes from SSID
+            String ssid = ssidWithQuotes.replaceAll("^\"|\"$", "");
+            Log.d("ssid", "getSSID: " + ssid);
+
+            int count = 1;
             for (ScanResult scanResult : scanResults) {
                 if (scanResult.SSID.equals(ssid)) {
-                    int count = 1;
                     // Add BSSID instead of SSID
                     bssidList.add("Pod " + count + ": " + scanResult.BSSID);
                     count += 1;
@@ -237,9 +248,7 @@ public class MainActivity extends AppCompatActivity {
                         // Retrieve and display the RSSI of the selected network
                         if (selectedNetwork != null) { // Add null check here
 
-                            WifiInfo wifiInfo = wifiManager.getConnectionInfo();
-
-                            wifiStateExtra = wifiInfo.getRssi();
+                            int wifiStateExtra = wifiManager.getConnectionInfo().getRssi();
 
                             if (wifiStateExtra < -23) {
                                 runOnUiThread(new Runnable() { // Updating UI inside runOnUiThread
@@ -313,8 +322,16 @@ public class MainActivity extends AppCompatActivity {
                             isContinuousFeedbackRunning = false;
                         }
                     } else {
-                        // Device is not connected to a Wi-Fi network
-                        signalStrengthTextView.setText("Device not connected to a Wifi network\nPlease connect to one to proceed");
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                // Device is not connected to a Wi-Fi network
+                                signalStrengthTextView.setText("Device not connected to a Wifi network\nPlease connect to one to proceed");
+                                measureDistanceButton.setText("START SEARCH");
+                            }
+                        });
+                        isContinuousFeedbackRunning = false;
+                        spinner.setEnabled(true);
                     }
                 }
 
@@ -402,12 +419,12 @@ public class MainActivity extends AppCompatActivity {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
     }
 
-    public static boolean isConnectedToWifi(Context context) {
-        ConnectivityManager connectivityManager = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
-        NetworkInfo networkInfo = null;
-        if (connectivityManager != null) {
-            networkInfo = connectivityManager.getNetworkInfo(ConnectivityManager.TYPE_WIFI);
+    public boolean isConnectedToWifi(Context context) {
+        WifiManager wifiManager = (WifiManager) context.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+        if (wifiManager.getConnectionInfo() != null) {
+            return true;
         }
-        return networkInfo != null && networkInfo.isConnected();
+        return false;
     }
+
 }
