@@ -1,0 +1,8 @@
+# how to create a venv
+#py -m venv (venv name)
+#in CMD:
+#(venv name)\Scripts\activate.bat
+#in powershell:
+#(venv name)\Scripts\activate.ps1
+
+# add here libraries:

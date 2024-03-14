@@ -218,25 +218,25 @@ public class MainActivity extends AppCompatActivity {
 
     private int calculateSoundInterval(int value) {
         if (value < 30){
-            return 250;
+            return 200;
         } else if (value < 35 && value >= 30) {
-            return 400;
+            return 350;
         } else if (value < 40 && value >= 35) {
-            return 650;
+            return 500;
         } else if (value < 45 && value >= 40) {
-            return 800;
+            return 650;
         } else if (value < 55 && value >= 45) {
-            return 950;
+            return 800;
         } else if (value < 60 && value >= 55) {
-            return 1100;
+            return 950;
         } else if (value >= 60 && value < 70){
-            return 1350;
+            return 1100;
         } else if (value >= 70 && value < 80) {
-            return 1500;
+            return 1250;
         } else if (value >= 90 && value < 80) {
-            return 1750;
+            return 1400;
         } else {
-            return 2000;
+            return 1550;
         }
     }
 
