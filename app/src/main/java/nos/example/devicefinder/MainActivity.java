@@ -7,7 +7,10 @@ import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.media.AudioFormat;
 import android.media.AudioTrack;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.net.wifi.ScanResult;
+import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
@@ -69,7 +72,7 @@ public class MainActivity extends AppCompatActivity {
         measureDistanceButton = findViewById(R.id.measureDistanceButton);
 
         // Update ArrayAdapter initialization
-        adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, getSSIDList());
+        adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, getBSSIDList());
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spinner.setAdapter(adapter);
 
@@ -83,8 +86,7 @@ public class MainActivity extends AppCompatActivity {
         // Register BroadcastReceiver for scan results
         registerReceiver(wifiReceiver, new IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION));
 
-        // Schedule the first scan immediately
-        mHandler.post(scanRunnable);
+        wifiManager.startScan();
 
         // Listen for item selection events on the Spinner
         spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
@@ -92,6 +94,8 @@ public class MainActivity extends AppCompatActivity {
             public void onItemSelected(AdapterView<?> adapterView, View view, int position, long id) {
                 // Retrieve the selected network
                 selectedNetwork = wifiArrayList.get(position);
+                // Connect to the selected Wi-Fi network
+                connectToWifi(selectedNetwork.BSSID);
             }
 
             @Override
@@ -129,27 +133,23 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        // Remove any pending callbacks to avoid memory leaks
-        mHandler.removeCallbacks(scanRunnable);
         // Unregister the broadcast receiver when the activity is destroyed to avoid memory leaks
         if (wifiReceiver != null) {
             unregisterReceiver(wifiReceiver);
         }
     }
 
-    // Define a Runnable to initiate the scan
-    private Runnable scanRunnable = new Runnable() {
-        @Override
-        public void run() {
-            // Start scanning for Wi-Fi networks
-            wifiManager.startScan();
+    // Method to connect to a Wi-Fi network using its BSSID
+    private void connectToWifi(String bssid) {
+        WifiConfiguration wifiConfig = new WifiConfiguration();
+        wifiConfig.BSSID = bssid;
+        wifiConfig.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
 
-            Log.d("startScan", "SCANNING");
-
-            // Schedule the next scan after 30 seconds
-            mHandler.postDelayed(this, 30 * 1000); // 30 seconds in milliseconds
-        }
-    };
+        int networkId = wifiManager.addNetwork(wifiConfig);
+        wifiManager.disconnect();
+        wifiManager.enableNetwork(networkId, true);
+        wifiManager.reconnect();
+    }
 
     BroadcastReceiver wifiReceiver = new BroadcastReceiver() {
         @Override
@@ -157,26 +157,52 @@ public class MainActivity extends AppCompatActivity {
             // Clear the existing list before adding new scan results
             wifiArrayList.clear();
 
-            // Add the new scan results to the list
-            wifiArrayList.addAll(wifiManager.getScanResults());
+            // Get the scan results
+            List<ScanResult> scanResults = wifiManager.getScanResults();
+
+            // Get the current WifiInfo
+            WifiInfo wifiInfo = wifiManager.getConnectionInfo();
+
+            // Get the SSID of the currently connected network
+            String ssid = wifiInfo.getSSID();
+
+            // Loop throughhe scan results
+            for (ScanResult result : scanResults) {
+                // Check if the SSID matches the specific SSID you want
+                if (result.SSID.equals(ssid)) {
+                    // Add the scan result to the list
+                    wifiArrayList.add(result);
+                }
+            }
 
             // Update the adapter with the new data
             adapter.clear();
-            adapter.addAll(getSSIDList());
+            adapter.addAll(getBSSIDList());
             adapter.notifyDataSetChanged();
         }
     };
 
-    // Helper method to extract SSID names from the scan results
-    private ArrayList<String> getSSIDList() {
-        ArrayList<String> ssidList = new ArrayList<>();
+
+    // Update the getSSIDList() method to get BSSIDs
+    private ArrayList<String> getBSSIDList() {
+        ArrayList<String> bssidList = new ArrayList<>();
         if (wifiManager != null) {
             List<ScanResult> scanResults = wifiManager.getScanResults();
+            // Get the current WifiInfo
+            WifiInfo wifiInfo = wifiManager.getConnectionInfo();
+
+            // Get the SSID of the currently connected network
+            String ssid = wifiInfo.getSSID();
             for (ScanResult scanResult : scanResults) {
-                ssidList.add(scanResult.SSID);
+                if (scanResult.SSID.equals(ssid)) {
+                    int count = 1;
+                    // Add BSSID instead of SSID
+                    bssidList.add("Pod " + count + ": " + scanResult.BSSID);
+                    count += 1;
+                }
             }
         }
-        return ssidList;
+        return bssidList;
     }
 
     private void startContinuousFeedback() {
@@ -206,94 +232,89 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void run() {
                 while (isContinuousFeedbackRunning) { // Check the flag before each iteration
+                    if (isConnectedToWifi(getApplicationContext())) {
+                        // Device is connected to a Wi-Fi network
+                        // Retrieve and display the RSSI of the selected network
+                        if (selectedNetwork != null) { // Add null check here
 
-                    // Retrieve and display the RSSI of the selected network
-                    if (selectedNetwork != null) { // Add null check here
+                            WifiInfo wifiInfo = wifiManager.getConnectionInfo();
 
-                        // Log details of the selected network
-                        Log.d("ContinuousFeedback", "Selected network: " + selectedNetwork.SSID + ", RSSI: " + selectedNetwork.level);
+                            wifiStateExtra = wifiInfo.getRssi();
 
-                        List<ScanResult> scanResults = wifiManager.getScanResults();
-                        for (ScanResult result : scanResults) {
-                            if (selectedNetwork != null && result.SSID.equals(selectedNetwork.SSID)) {
-                                // Access RSSI value
-                                wifiStateExtra = result.level;
-                                // Log details of the selected network
-                                Log.d("ContinuousFeedback", "Selected network: " + selectedNetwork.SSID + ", RSSI: " + wifiStateExtra);
-                                break;
-                            }
-                        }
+                            if (wifiStateExtra < -23) {
+                                runOnUiThread(new Runnable() { // Updating UI inside runOnUiThread
+                                    @Override
+                                    public void run() {
+                                        // Display signal strength level
+                                        signalStrengthTextView.setText("Wifi Network: " + selectedNetwork.SSID +  "\n\nRSSI: " + wifiStateExtra + "\n\n");
 
-                        if (wifiStateExtra < -23) {
-                            runOnUiThread(new Runnable() { // Updating UI inside runOnUiThread
-                                @Override
-                                public void run() {
-                                    // Display signal strength level
-                                    signalStrengthTextView.setText("Wifi Network: " + selectedNetwork.SSID +  "\n\nRSSI: " + wifiStateExtra + "\n\n");
+                                        int signalLevel = WifiManager.calculateSignalLevel(wifiStateExtra, 5);
 
-                                    int signalLevel = WifiManager.calculateSignalLevel(wifiStateExtra, 5);
+                                        // Display signal strength level
+                                        signalStrengthTextView.append("Signal Strength: " + signalLevel);
+                                    }
+                                });
 
-                                    // Display signal strength level
-                                    signalStrengthTextView.append("Signal Strength: " + signalLevel);
+                                int vibrationAmplitude = calculateVibrationAmplitude(Math.abs(wifiStateExtra));
+                                int vibrationDuration = 100;
+
+                                if (vibrator.hasVibrator()) {
+                                    // Create a waveform vibration effect
+                                    VibrationEffect effect = VibrationEffect.createOneShot(vibrationDuration, vibrationAmplitude);
+                                    vibrator.vibrate(effect);
                                 }
-                            });
 
-                            int vibrationAmplitude = calculateVibrationAmplitude(Math.abs(wifiStateExtra));
-                            int vibrationDuration = 100;
+                                // Generate and play tone
+                                double frequency = mapValueToFrequency(Math.abs(wifiStateExtra));
+                                double volume = 0.05;
 
-                            if (vibrator.hasVibrator()) {
-                                // Create a waveform vibration effect
-                                VibrationEffect effect = VibrationEffect.createOneShot(vibrationDuration, vibrationAmplitude);
-                                vibrator.vibrate(effect);
+                                short[] buffer = new short[bufferSize];
+                                for (int i = 0; i < bufferSize; i++) {
+                                    double sample = Math.sin(2 * Math.PI * i * frequency / sampleRate);
+                                    buffer[i] = (short) (sample * Short.MAX_VALUE * volume);
+                                }
+
+                                audioTrack.write(buffer, 0, bufferSize);
                             }
 
-                            // Generate and play tone
-                            double frequency = mapValueToFrequency(Math.abs(wifiStateExtra));
-                            double volume = 0.05;
+                            if (wifiStateExtra > -24) {
+                                playMarioSong();
+                                isContinuousFeedbackRunning = false;
 
-                            short[] buffer = new short[bufferSize];
-                            for (int i = 0; i < bufferSize; i++) {
-                                double sample = Math.sin(2 * Math.PI * i * frequency / sampleRate);
-                                buffer[i] = (short) (sample * Short.MAX_VALUE * volume);
+                                // UI update when the thread is done
+                                runOnUiThread(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        // Update UI after thread completion
+                                        signalStrengthTextView.setText("\n\n  Congratulations, you found the router!\n");
+                                        signalStrengthTextView.append("RSSI: " + wifiStateExtra);
+                                        measureDistanceButton.setText("START SEARCH");
+                                    }
+                                });
                             }
 
-                            audioTrack.write(buffer, 0, bufferSize);
-                        }
-
-                        if (wifiStateExtra > -24) {
-                            playMarioSong();
-                            isContinuousFeedbackRunning = false;
-
+                            try {
+                                int intervalSound = calculateSoundInterval(Math.abs(wifiStateExtra));
+                                // Wait for a short duration before the next feedback
+                                Thread.sleep(intervalSound); // Adjust this value as needed
+                            } catch (InterruptedException e) {
+                                e.printStackTrace();
+                            }
+                        } else {
                             // UI update when the thread is done
                             runOnUiThread(new Runnable() {
                                 @Override
                                 public void run() {
                                     // Update UI after thread completion
-                                    signalStrengthTextView.setText("\n\n  Congratulations, you found the router!\n");
-                                    signalStrengthTextView.append("RSSI: " + wifiStateExtra);
+                                    signalStrengthTextView.setText("Wifi network not selected\nPlease choose one from the list");
                                     measureDistanceButton.setText("START SEARCH");
                                 }
                             });
-                        }
-
-                        try {
-                            int intervalSound = calculateSoundInterval(Math.abs(wifiStateExtra));
-                            // Wait for a short duration before the next feedback
-                            Thread.sleep(intervalSound); // Adjust this value as needed
-                        } catch (InterruptedException e) {
-                            e.printStackTrace();
+                            isContinuousFeedbackRunning = false;
                         }
                     } else {
-                        // UI update when the thread is done
-                        runOnUiThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                // Update UI after thread completion
-                                signalStrengthTextView.setText("Wifi network not selected\nPlease choose one from the list");
-                                measureDistanceButton.setText("START SEARCH");
-                            }
-                        });
-                        isContinuousFeedbackRunning = false;
+                        // Device is not connected to a Wi-Fi network
+                        signalStrengthTextView.setText("Device not connected to a Wifi network\nPlease connect to one to proceed");
                     }
                 }
 
@@ -379,5 +400,14 @@ public class MainActivity extends AppCompatActivity {
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         // Call the superclass implementation to ensure the framework gets the expected behavior
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+    }
+
+    public static boolean isConnectedToWifi(Context context) {
+        ConnectivityManager connectivityManager = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+        NetworkInfo networkInfo = null;
+        if (connectivityManager != null) {
+            networkInfo = connectivityManager.getNetworkInfo(ConnectivityManager.TYPE_WIFI);
+        }
+        return networkInfo != null && networkInfo.isConnected();
     }
 }
